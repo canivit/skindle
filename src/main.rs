@@ -1,11 +1,8 @@
 use clap::Parser;
 use skindle::Args;
-use std::process;
+use anyhow::Result;
 
-fn main() {
+fn main() -> Result<()> {
     let args = Args::parse();
-    if let Err(e) = skindle::run(&args) {
-        eprintln!("{e}");
-        process::exit(1);
-    }
+    skindle::run(&args)
 }
