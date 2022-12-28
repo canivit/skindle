@@ -9,5 +9,6 @@ edition = "2021"
 anyhow = "1.0.68"
 clap = { version = "4.0.32", features = ["derive"] }
 directories = "4.0.1"
+lettre = { version = "0.10.1", features = ["smtp-transport", "rustls-tls"] }
 serde = { version = "1.0.152", features = ["serde_derive"] }
 toml = "0.5.10"

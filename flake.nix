@@ -18,6 +18,10 @@
         rustc
         rust-analyzer
         rustfmt
+
+        # for lettre crate:
+        #openssl
+        #pkg-config
       ];
       shellHook = ''
       '';
