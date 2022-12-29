@@ -1,13 +1,16 @@
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Error, Ok, Result};
 use clap::Parser;
 use directories::ProjectDirs;
 use lettre::{
-    message::Mailbox, transport::smtp::authentication::Credentials,
-    transport::smtp::response::Response, Message, SmtpTransport, Transport,
+    message::Mailbox,
+    transport::smtp::{authentication::Credentials, response::Response},
+    Message, SmtpTransport, Transport,
 };
 use serde::Deserialize;
-use std::fs;
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Parser)]
 pub struct Args {
@@ -24,6 +27,7 @@ pub struct Config {
 }
 
 pub fn run(args: &Args) -> Result<()> {
+    validate_ebook_file(&args.ebook_file)?;
     let config = read_config()?;
     let email = build_email(&config.from_address, &config.to_address, &args.ebook_file)?;
     send_email(
@@ -32,6 +36,54 @@ pub fn run(args: &Args) -> Result<()> {
         &config.smtp_username,
         &config.smtp_password,
     )
+}
+
+fn validate_ebook_file(ebook_file: &Path) -> Result<()> {
+    ebook_file
+        .try_exists()
+        .with_context(|| {
+            format!(
+                "Failed to check if the ebook file \"{}\" exists",
+                ebook_file.display()
+            )
+        })
+        .and_then(|exists| {
+            if exists {
+                Ok(())
+            } else {
+                Err(Error::msg(format!(
+                    "Ebook file \"{}\" does not exist",
+                    ebook_file.display()
+                )))
+            }
+        })?;
+
+    if !ebook_file.is_file() {
+        return Err(Error::msg(format!(
+            "\"{}\" is not a file",
+            ebook_file.display()
+        )));
+    }
+
+    ebook_file
+        .extension()
+        .ok_or(Error::msg(format!(
+            "\"{}\" is not a pdf or epub file",
+            ebook_file.display()
+        )))
+        .and_then(|extension| {
+            let ext = extension.to_string_lossy();
+            if ext == "pdf" || ext == "epub" {
+                Ok(())
+            } else {
+                Err(Error::msg(format!(
+                    "\"{}\" is not a pdf or epub file",
+                    ebook_file.display()
+                )))
+            }
+        })?;
+
+    Ok(())
 }
 
 fn read_config() -> Result<Config> {
@@ -43,14 +95,14 @@ fn read_config() -> Result<Config> {
 
     let content = fs::read_to_string(&config_file_path).with_context(|| {
         format!(
-            "Failed to read the config file {}",
+            "Failed to read the config file \"{}\"",
             config_file_path.display(),
         )
     })?;
 
     let config: Config = toml::from_str(&content).with_context(|| {
         format!(
-            "Failed to parse the config file {}",
+            "Failed to parse the config file \"{}\"",
             config_file_path.display(),
         )
     })?;
@@ -58,14 +110,17 @@ fn read_config() -> Result<Config> {
     Ok(config)
 }
 
-fn build_email(from_address: &str, to_address: &str, ebook_file: &PathBuf) -> Result<Message> {
-    let from = from_address
-        .parse::<Mailbox>()
-        .with_context(|| format!("From address {} is not a valid email address", from_address,))?;
+fn build_email(from_address: &str, to_address: &str, ebook_file: &Path) -> Result<Message> {
+    let from = from_address.parse::<Mailbox>().with_context(|| {
+        format!(
+            "From address \"{}\" is not a valid email address",
+            from_address,
+        )
+    })?;
 
     let to = to_address
         .parse::<Mailbox>()
-        .with_context(|| format!("To address {} is not a valid email address", to_address,))?;
+        .with_context(|| format!("To address \"{}\" is not a valid email address", to_address,))?;
 
     // ebook_file is already validated so it is safe to call unwrap
     let subject = ebook_file.file_name().unwrap().to_string_lossy();
@@ -85,7 +140,7 @@ fn send_email(
     smtp_password: &str,
 ) -> Result<()> {
     let sender = SmtpTransport::starttls_relay(smtp_server)
-        .with_context(|| format!("Failed to connect to the SMTP server {}", smtp_server))?
+        .with_context(|| format!("Failed to connect to the SMTP server \"{}\"", smtp_server))?
         .credentials(Credentials::new(
             smtp_username.to_string(),
             smtp_password.to_string(),
