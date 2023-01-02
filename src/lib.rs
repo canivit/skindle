@@ -2,7 +2,7 @@ use anyhow::{Context, Error, Ok, Result};
 use clap::Parser;
 use directories::ProjectDirs;
 use lettre::{
-    message::Mailbox,
+    message::{header::ContentType, Attachment, Mailbox, MultiPart, SinglePart},
     transport::smtp::{authentication::Credentials, response::Response},
     Message, SmtpTransport, Transport,
 };
@@ -104,15 +104,42 @@ fn build_email(from_address: &str, to_address: &str, ebook_file: &Path) -> Resul
         .parse::<Mailbox>()
         .with_context(|| format!("To address \"{}\" is not a valid email address", to_address,))?;
 
-    // ebook_file is already validated so it is safe to call unwrap
-    let subject = ebook_file.file_name().unwrap().to_string_lossy();
+    let filename = get_file_name(ebook_file)?;
+
+    let attachment = build_attachment(ebook_file, &filename)?;
 
     Message::builder()
         .from(from)
         .to(to)
-        .subject(subject)
-        .body(String::from(""))
+        .subject(&filename)
+        .multipart(
+            MultiPart::mixed()
+                .singlepart(SinglePart::plain(filename))
+                .singlepart(attachment),
+        )
         .with_context(|| "Failed to build email")
+}
+
+fn build_attachment(ebook_file: &Path, filename: &str) -> Result<SinglePart> {
+    let content = fs::read(ebook_file).with_context(|| {
+        format!(
+            "Failed to read the contents of the ebook file \"{}\"",
+            ebook_file.display()
+        )
+    })?;
+    let attachment =
+        Attachment::new(filename.to_string()).body(content, ContentType::parse("application/pdf")?);
+    Ok(attachment)
+}
+
+fn get_file_name(ebook_file: &Path) -> Result<String> {
+    ebook_file
+        .file_name()
+        .map(|path| path.to_string_lossy().to_string())
+        .ok_or(Error::msg(format!(
+            "Ebook file path \"{}\" does not have a file name",
+            ebook_file.display()
+        )))
 }
 
 fn send_email(
