@@ -65,24 +65,6 @@ fn validate_ebook_file(ebook_file: &Path) -> Result<()> {
         )));
     }
 
-    ebook_file
-        .extension()
-        .ok_or(Error::msg(format!(
-            "\"{}\" is not a pdf or epub file",
-            ebook_file.display()
-        )))
-        .and_then(|extension| {
-            let ext = extension.to_string_lossy();
-            if ext == "pdf" || ext == "epub" {
-                Ok(())
-            } else {
-                Err(Error::msg(format!(
-                    "\"{}\" is not a pdf or epub file",
-                    ebook_file.display()
-                )))
-            }
-        })?;
-
     Ok(())
 }
 
