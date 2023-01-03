@@ -18,54 +18,62 @@ pub struct Args {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
+struct Config {
     smtp_server: String,
     smtp_username: String,
     smtp_password: String,
     from_address: String,
     to_address: String,
+    convert_to_mobi: bool,
+}
+
+struct FileInfo {
+    path: PathBuf,
+    name: String,
+    stem: String,
+}
+
+impl FileInfo {
+    fn from_path(path: &Path) -> Result<Self> {
+        let name = path
+            .file_name()
+            .map(|path| path.to_string_lossy().to_string())
+            .ok_or(Error::msg(format!(
+                "File path \"{}\" does not have a file name",
+                path.display()
+            )))?;
+
+        let stem = path
+            .file_stem()
+            .map(|path| path.to_string_lossy().to_string())
+            .ok_or(Error::msg(format!(
+                "File path \"{}\" does not have a file prefix",
+                path.display()
+            )))?;
+
+        Ok(FileInfo {
+            path: path.to_path_buf(),
+            name,
+            stem,
+        })
+    }
 }
 
 pub fn run(args: &Args) -> Result<()> {
-    validate_ebook_file(&args.ebook_file)?;
+    let ebook_file = FileInfo::from_path(&args.ebook_file)?;
     let config = read_config()?;
-    let email = build_email(&config.from_address, &config.to_address, &args.ebook_file)?;
+    let ebook_file = if config.convert_to_mobi {
+        convert_to_mobi(&ebook_file)?
+    } else {
+        ebook_file
+    };
+    let email = build_email(&config.from_address, &config.to_address, &ebook_file)?;
     send_email(
         &email,
         &config.smtp_server,
         &config.smtp_username,
         &config.smtp_password,
     )
-}
-
-fn validate_ebook_file(ebook_file: &Path) -> Result<()> {
-    ebook_file
-        .try_exists()
-        .with_context(|| {
-            format!(
-                "Failed to check if the ebook file \"{}\" exists",
-                ebook_file.display()
-            )
-        })
-        .and_then(|exists| {
-            if exists {
-                Ok(())
-            } else {
-                Err(Error::msg(format!(
-                    "Ebook file \"{}\" does not exist",
-                    ebook_file.display()
-                )))
-            }
-        })?;
-
-    if !ebook_file.is_file() {
-        return Err(Error::msg(format!(
-            "\"{}\" is not a file",
-            ebook_file.display()
-        )));
-    }
-
-    Ok(())
 }
 
 fn read_config() -> Result<Config> {
@@ -92,7 +100,7 @@ fn read_config() -> Result<Config> {
     Ok(config)
 }
 
-fn build_email(from_address: &str, to_address: &str, ebook_file: &Path) -> Result<Message> {
+fn build_email(from_address: &str, to_address: &str, ebook_file: &FileInfo) -> Result<Message> {
     let from = from_address.parse::<Mailbox>().with_context(|| {
         format!(
             "From address \"{}\" is not a valid email address",
@@ -104,42 +112,18 @@ fn build_email(from_address: &str, to_address: &str, ebook_file: &Path) -> Resul
         .parse::<Mailbox>()
         .with_context(|| format!("To address \"{}\" is not a valid email address", to_address,))?;
 
-    let filename = get_file_name(ebook_file)?;
-
-    let attachment = build_attachment(ebook_file, &filename)?;
+    let attachment = build_attachment(ebook_file)?;
 
     Message::builder()
         .from(from)
         .to(to)
-        .subject(&filename)
+        .subject(&ebook_file.name)
         .multipart(
             MultiPart::mixed()
-                .singlepart(SinglePart::plain(filename))
+                .singlepart(SinglePart::plain((&ebook_file.name).to_string()))
                 .singlepart(attachment),
         )
         .with_context(|| "Failed to build email")
-}
-
-fn build_attachment(ebook_file: &Path, filename: &str) -> Result<SinglePart> {
-    let content = fs::read(ebook_file).with_context(|| {
-        format!(
-            "Failed to read the contents of the ebook file \"{}\"",
-            ebook_file.display()
-        )
-    })?;
-    let attachment =
-        Attachment::new(filename.to_string()).body(content, ContentType::parse("application/pdf")?);
-    Ok(attachment)
-}
-
-fn get_file_name(ebook_file: &Path) -> Result<String> {
-    ebook_file
-        .file_name()
-        .map(|path| path.to_string_lossy().to_string())
-        .ok_or(Error::msg(format!(
-            "Ebook file path \"{}\" does not have a file name",
-            ebook_file.display()
-        )))
 }
 
 fn send_email(
@@ -162,6 +146,22 @@ fn send_email(
         .and_then(check_reponse)
 }
 
+fn build_attachment(ebook_file: &FileInfo) -> Result<SinglePart> {
+    let content = fs::read(&ebook_file.path).with_context(|| {
+        format!(
+            "Failed to read the contents of the ebook file \"{}\"",
+            ebook_file.path.display()
+        )
+    })?;
+    let attachment = Attachment::new(ebook_file.name.to_string())
+        .body(content, ContentType::parse("application/pdf")?);
+    Ok(attachment)
+}
+
+fn convert_to_mobi(ebook_file: &FileInfo) -> Result<FileInfo> {
+    todo!()
+}
+
 fn check_reponse(response: Response) -> Result<()> {
     if response.is_positive() {
         Ok(())
@@ -170,6 +170,3 @@ fn check_reponse(response: Response) -> Result<()> {
         Err(Error::msg(response_msg))
     }
 }
-
-#[cfg(test)]
-mod tests {}
