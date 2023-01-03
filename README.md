@@ -14,6 +14,7 @@ smtp_username = "your_email@gmail.com"
 smtp_password = "your_password"
 from_address = "your_email@gmail.com"
 to_address = "your_kindle_email@kindle.com"
+convert_to_mobi = true
 ```
 
 ## Motivation

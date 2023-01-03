@@ -8,8 +8,9 @@ use lettre::{
 };
 use serde::Deserialize;
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 #[derive(Parser)]
@@ -30,7 +31,6 @@ struct Config {
 struct FileInfo {
     path: PathBuf,
     name: String,
-    stem: String,
 }
 
 impl FileInfo {
@@ -43,18 +43,9 @@ impl FileInfo {
                 path.display()
             )))?;
 
-        let stem = path
-            .file_stem()
-            .map(|path| path.to_string_lossy().to_string())
-            .ok_or(Error::msg(format!(
-                "File path \"{}\" does not have a file prefix",
-                path.display()
-            )))?;
-
         Ok(FileInfo {
             path: path.to_path_buf(),
             name,
-            stem,
         })
     }
 }
@@ -159,7 +150,21 @@ fn build_attachment(ebook_file: &FileInfo) -> Result<SinglePart> {
 }
 
 fn convert_to_mobi(ebook_file: &FileInfo) -> Result<FileInfo> {
-    todo!()
+    let dest = env::temp_dir()
+        .join(&ebook_file.name)
+        .with_extension("mobi");
+
+    let output = Command::new("ebook-convert")
+        .arg(&ebook_file.path)
+        .arg(&dest)
+        .output()
+        .with_context(|| format!("Failed to launch \"ebook-convert\" to convert the ebook file to mobi. Make sure calibre is installed."))?;
+
+    if output.status.success() {
+        Ok(FileInfo::from_path(&dest)?)
+    } else {
+        Err(Error::msg("Failed to convert the ebook file to mobi."))
+    }
 }
 
 fn check_reponse(response: Response) -> Result<()> {
