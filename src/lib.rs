@@ -53,18 +53,26 @@ impl FileInfo {
 pub fn run(args: &Args) -> Result<()> {
     let ebook_file = FileInfo::from_path(&args.ebook_file)?;
     let config = read_config()?;
+
     let ebook_file = if config.convert_to_mobi {
         convert_to_mobi(&ebook_file)?
     } else {
         ebook_file
     };
+
     let email = build_email(&config.from_address, &config.to_address, &ebook_file)?;
     send_email(
         &email,
         &config.smtp_server,
         &config.smtp_username,
         &config.smtp_password,
-    )
+    )?;
+
+    if config.convert_to_mobi {
+        delete_temp_mobi_file(&ebook_file.path)?;
+    }
+
+    Ok(())
 }
 
 fn read_config() -> Result<Config> {
@@ -158,13 +166,27 @@ fn convert_to_mobi(ebook_file: &FileInfo) -> Result<FileInfo> {
         .arg(&ebook_file.path)
         .arg(&dest)
         .output()
-        .with_context(|| format!("Failed to launch \"ebook-convert\" to convert the ebook file to mobi. Make sure calibre is installed."))?;
+        .with_context(|| {
+            concat!(
+                "Failed to launch \"ebook-convert\" to convert the ebook file to mobi.",
+                " Make sure calibre is installed."
+            )
+        })?;
 
     if output.status.success() {
         Ok(FileInfo::from_path(&dest)?)
     } else {
         Err(Error::msg("Failed to convert the ebook file to mobi."))
     }
+}
+
+fn delete_temp_mobi_file(path: &Path) -> Result<()> {
+    fs::remove_file(path).with_context(|| {
+        format!(
+            "Failed to delete temp mobi file \"{}\"",
+            path.to_string_lossy()
+        )
+    })
 }
 
 fn check_reponse(response: Response) -> Result<()> {
