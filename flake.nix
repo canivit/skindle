@@ -21,5 +21,16 @@
           calibre
         ];
       };
+
+      defaultPackage = pkgs.rustPlatform.buildRustPackage {
+        pname = "skindle";
+        version = "1.0.0";
+        src = ./.;
+        cargoLock = {
+          lockFile = ./Cargo.lock;
+        };
+        nativeBuildInputs = with pkgs; [ pkg-config openssl ];
+        buildInputs = with pkgs; [ pkg-config openssl ];
+      };
     });
 }
