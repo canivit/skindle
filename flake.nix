@@ -18,6 +18,7 @@
           rustc
           rust-analyzer
           rustfmt
+          calibre
         ];
       };
     });
