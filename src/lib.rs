@@ -122,7 +122,7 @@ fn build_email(from_address: &str, to_address: &str, ebook_file: &FileInfo) -> R
                 .singlepart(SinglePart::plain((&ebook_file.name).to_string()))
                 .singlepart(attachment),
         )
-        .with_context(|| "Failed to build email")
+        .context("Failed to build email")
 }
 
 fn send_email(
@@ -141,7 +141,7 @@ fn send_email(
 
     sender
         .send(email)
-        .with_context(|| "Sending email failed")
+        .context("Sending email failed")
         .and_then(check_reponse)
 }
 
