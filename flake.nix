@@ -19,6 +19,8 @@
           rust-analyzer
           rustfmt
           calibre
+          pkg-config
+          openssl
         ];
       };
 
